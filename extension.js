@@ -35,8 +35,8 @@ class Extension {
 
         this._pid = null;
         this._busProxy = new TabModeSwitchDBusProxy(Gio.DBus.session, "de.devpi.tabmodesw", "/");
-        this._pid = this._busProxy.PidSync();
-        let state = this._busProxy.StateSync() === 'true';
+        this._pid = this._busProxy.PidSync()[0];
+        let state = this._busProxy.StateSync()[0];
         log(`state ${state}`);
         log(`pid ${this._pid}`);
 
