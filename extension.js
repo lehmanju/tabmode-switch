@@ -9,58 +9,71 @@ const Lang = imports.lang;
 const Util = imports.misc.util;
 const GLib = imports.gi.GLib;
 
+const TabModeSwitchIface =
+    '<node>                                                       \
+     <interface name="de.devpi.tabmodesw"> \
+        <method name="Enable" />                                 \
+        <method name="Disable" />   \
+        <method name="Pid"> \
+            <arg name="pid" type="u" direction="out" /> \
+        </method>                             \
+        <method name="State"> \
+            <arg name="state" type="b" direction="out" /> \
+        </method>  \
+     </interface>                                                 \
+     </node>';
 
+const TabModeSwitchDBusProxy = Gio.DBusProxy.makeProxyWrapper(TabModeSwitchIface);
 
 class Extension {
     constructor() {
-        
+
     }
-    
+
     enable() {
         log(`enabling ${Me.metadata.name}`);
 
-        // start socket
-        let [success, pid] = GLib.spawn_async(null, ["tabmodesw"], null, GLib.SpawnFlags.SEARCH_PATH | GLib.SpawnFlags.DO_NOT_REAP_CHILD, null, null);
-        GLib.child_watch_add(GLib.PRIORITY_DEFAULT, pid, Lang.bind(this, function(pid, status, user_data) {
-            GLib.spawn_close_pid(pid);
-            this.pid = null;            
-        }));
-        this.pid = pid;
+        this._pid = null;
+        this._busProxy = new TabModeSwitchDBusProxy(Gio.DBus.session, "de.devpi.tabmodesw", "/");
+        this._pid = this._busProxy.PidSync();
+        let state = this._busProxy.StateSync() === 'true';
+        log(`state ${state}`);
+        log(`pid ${this._pid}`);
 
         let menu = Main.panel.statusArea.aggregateMenu
-
-        this.menuItem = new PopupMenu.PopupSwitchMenuItem("Tablet mode", false);
+        this.menuItem = new PopupMenu.PopupSwitchMenuItem("Tablet mode", state);
         this.menuItem.connect("toggled", Lang.bind(this, function (item, state) {
-            let socketClient = new Gio.SocketClient();
-            let conn = socketClient.connect(new Gio.UnixSocketAddress({path:"/tmp/tabmodesw.sock"}), null);
-            let output = conn.get_output_stream();
             if (state) {
                 // socket enable tablet mode
-                output.write_bytes(new GLib.Bytes('1'), null);
+                this._busProxy.EnableSync();
             } else {
                 // socket disable tablet mode
-                output.write_bytes(new GLib.Bytes('0'), null);
+                this._busProxy.DisableSync();
             }
         }));
         menu.menu.addMenuItem(this.menuItem, 0);
     }
-    
+
     // REMINDER: It's required for extensions to clean up after themselves when
     // they are disabled. This is required for approval during review!
     disable() {
         log(`disabling ${Me.metadata.name}`);
 
         this.menuItem.destroy();
+
         // disable socket
-        if (this.pid) {
+        let lockingScreen = (Main.sessionMode.currentMode == "unlock-dialog" || Main.sessionMode.currentMode == "lock-screen");
+
+        if (this.pid && !lockingScreen) {
             Util.spawnCommandLine("kill -TERM " + this.pid);
         }
+        delete this._busProxy;
     }
 }
 
 
 function init() {
     log(`initializing ${Me.metadata.name}`);
-    
+
     return new Extension();
 }
