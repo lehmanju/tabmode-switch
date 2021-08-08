@@ -1,0 +1,8 @@
+{
+  "name": "Tablet Mode Switch",
+  "description": "Manually switch between tablet and normal mode",
+  "uuid": "tabmode@devpi.de",
+  "shell-version": [
+    "40"
+  ]
+}
